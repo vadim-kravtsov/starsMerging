@@ -1,4 +1,4 @@
-from numpy import array, linspace, exp, log
+from numpy import array, linspace, log, exp, seterr
 from math import log2
 from numpy.random import power, lognormal, random, randint
 import matplotlib.pyplot as plt
@@ -7,21 +7,15 @@ from scipy.interpolate import interp1d
 from scipy.optimize import curve_fit
 
 style.use('classic')
-
-#n = int(input('Enter number of stars:'))
-n = 500000
-#percent of coliding
-p = 0.95		
-L = int(p*n)
-M0 = 1.0
-M = [1, 10]
-beta = 2.35
-
+seterr('ignore')
 		
 def imf(model, n):
 	'''Initial mass function'''
 	i = 0
 	s = []
+	M0 = 1.0
+	M = [1, 10]
+	beta = 2.35
 	if model == 'A':
 		#Uniform star mass
 		return [M0 for _ in range(n)]
@@ -54,15 +48,24 @@ def merge(stars):
 
 
 def main():
+	print('-------------------starMerging-------------------')
+	print('----------------------v0.0.1---------------------')
+	print('You can choose initial mass function:')
 	print('A - uniform IMF\nB - Salpeter IMF\nC - lognormal IMF')
-	model = input('Choose model:')
+	print('Press "Enter" to choose default parameters:')
+	model = input('Choose mass function (default "B"):') or 'B'
+	n = input('Enter number of stars (default 100000):') or 100000; n = int(n);
+	p = input('Enter percent of merging (default 0.95):') or 0.95; p = float(p);
+	print("Calculating... it may take few minutes, it's ok :)")
+	L = int(p*n)
+
 	stars = imf(model, n)
 
 	def func(x, a, b, c):
-		if model == 'A':
+		if model in '':
 			return a*x**(-b)+c
-		elif model == 'B':
-			return a/x*exp(b*log(x)**2)+c
+		elif model in 'ABC':
+			return a*exp(-b*x)+c
 
 	if model == 'A':
 		nbins = 10
@@ -75,7 +78,7 @@ def main():
 	plt.rc('font', family='serif')
 
 	plt.hist(stars, bins = [i for i in linspace(bounds[0], bounds[1], nbins)], label = 'IMF', color = '#0092CC', alpha = 0.7)
-	plt.title('Initial and result mass distributions')
+	plt.title('Initial and result mass distributions ({} stars)'.format(n))
 	plt.xlabel(r'Mass, $M_\odot$ ')
 	plt.ylabel(r'Number of stars, N')
 	plt.legend()
@@ -84,36 +87,32 @@ def main():
 	#Stars stars merging
 	for _ in range(L):
 		merge(stars)
-
 	plt.hist(stars, bins = [i for i in linspace(bounds[0], bounds[1], nbins)], label = 'RMF', color = '#FF3333', alpha = 0.7)
 	plt.legend()
 	plt.savefig('compared.png')
-	plt.show()
-	
+	plt.clf()
+	bounds = [int(min(stars)), int(max(stars)) if max(stars)<150 else 150]
 	vals, bins, patches = plt.hist(stars, bins = [i for i in linspace(bounds[0], bounds[1], nbins)], color = '#0092CC')
 	newBins = array([(bins[i]+bins[i+1])/2 for i in range(0,len(bins)-1)])
-	popt, pcov = curve_fit(func, newBins, vals, maxfev = L)
-	funcBins = linspace(bounds[0],bounds[0],100)
+	
+	try:
+		popt, pcov = curve_fit(func, newBins, vals, maxfev = L)
+		funcBins = linspace(bounds[0],bounds[1],100)
+		plt.plot(funcBins, func(funcBins, *popt),
+					label='Approximation: $ae^{-%1.3fM}+c$'%popt[1], color = '#FF3333')
+		plt.legend()
+	except:
+		print("Approximation not found :(")
+
 	plt.plot(newBins, vals, 'o', color = '#FF3333')
-	plt.title('Mass distribution after %i colliding'%L)
+	plt.title('Mass distribution after {} ({} \%) merging'.format(L,100*p))
 	plt.ylim(0,max(vals)+0.2*max(vals))
 	plt.xlabel(r'Mass, $M_\odot$ ')
 	plt.ylabel(r'Number of stars, N')
-	plt.legend()
 	
-	#Uniform model
-	if model == 'A':	
-		plt.plot(funcBins, func(funcBins, *popt),
-				label='Fitting: $a\cdot M^{-%1.3f}+c$'%popt[1], color = '#FF3333')
-			# tuple(popt), color = '#FF3333')
-	#Salpeter model
-	elif model == 'B':
-		plt.plot(funcBins, func(funcBins, *popt),
-				label='Fitting:$ \\frac{a}{x} \cdot e^{-%1.3f \cdot {\log^2{M}}}+c $'%popt[1], color = '#FF3333')
-	plt.legend()
 	plt.savefig('rmf.png')
 	plt.show()
-
+	print('Finish! If all was ok - you can find rmf.png and imf.png in work directory.')
 
 main()
 
